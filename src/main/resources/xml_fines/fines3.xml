@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<fines>
+    <fine>
+        <type>RED_LIGHT</type>
+        <amount>30500.0</amount>
+    </fine>
+    <fine>
+        <type>SPEEDING</type>
+        <amount>10000.0</amount>
+    </fine>
+</fines>

@@ -33,74 +33,80 @@ import java.util.*;
  * * Опціонально (на макс. бал): зробити так, щоб вхідні файли не завантажувалися цілком в пам'ять.
  */
 public class Task2 {
-    public static void convertFormat(File in, File out) throws IOException {
+    public static void convertFormat(File in, File out) throws JAXBException, IOException {
         JsonFactory jsonFactory = new JsonFactory();
-        if (in.getAbsolutePath().endsWith(".json") && out.getAbsolutePath().endsWith(".xml")) {
+        FineList fList = new FineList();
+        Map<String, BigDecimal> container = new HashMap<>();
 
-            try (BufferedReader reader = new BufferedReader(new FileReader(in));
-                 JsonParser jsonParser = jsonFactory.createParser(reader)) {
+        //from json to xml
+        if (out.getAbsolutePath().endsWith(".xml")) {
+            for (File inFile : Objects.requireNonNull(in.listFiles())
+            ) {
+                if (inFile.getAbsolutePath().endsWith(".json") && out.getAbsolutePath().endsWith(".xml")) {
+                    try (BufferedReader reader = new BufferedReader(new FileReader(inFile));
+                         JsonParser jsonParser = jsonFactory.createParser(reader)) {
+                        while (jsonParser.nextToken() != JsonToken.END_ARRAY) {
+                            String field;
+                            String name = "";
+                            BigDecimal amount = new BigDecimal(0);
+                            while (jsonParser.nextToken() != JsonToken.END_OBJECT) {
+                                if (jsonParser.currentName() != null) {
 
-                Map<String, BigDecimal> map = new HashMap<>();
-
-                while (jsonParser.nextToken() != JsonToken.END_ARRAY) {
-                    String field;
-                    String name = "";
-                    BigDecimal amount = new BigDecimal(0);
-                    while (jsonParser.nextToken() != JsonToken.END_OBJECT) {
-                        if (jsonParser.currentName() != null) {
-
-                            field = jsonParser.currentName().toUpperCase(Locale.ROOT);
-                            if (field.equals("TYPE"))
-                                name = jsonParser.getValueAsString();
-                            if (field.equals("FINE_AMOUNT"))
-                                amount = BigDecimal.valueOf(jsonParser.getValueAsDouble());
+                                    field = jsonParser.currentName().toUpperCase(Locale.ROOT);
+                                    if (field.equals("TYPE"))
+                                        name = jsonParser.getValueAsString();
+                                    if (field.equals("FINE_AMOUNT"))
+                                        amount = BigDecimal.valueOf(jsonParser.getValueAsDouble());
+                                }
+                            }
+                            container.put(name, container.getOrDefault(name, BigDecimal.ZERO).add(amount));
                         }
+                    } catch (IOException e) {
+                        e.printStackTrace();
                     }
-                    map.put(name, map.getOrDefault(name, BigDecimal.ZERO).add(amount));
                 }
-
-                List<Fine> list = new ArrayList<>();
-                map.entrySet().stream()
-                        .sorted(Map.Entry.<String, BigDecimal>comparingByValue().reversed())
-                        .forEach(x -> list.add(new Fine(x.getKey(), x.getValue())));
-                FineList fList = new FineList();
-                fList.setList(list);
-                JAXBContext jaxbContext = JAXBContext.newInstance(FineList.class);
-                Marshaller marshaller = jaxbContext.createMarshaller();
-                marshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, Boolean.TRUE);
-                marshaller.marshal(fList, out);
-
-            } catch (JAXBException | IOException e) {
-                e.printStackTrace();
             }
-        } else if (in.getAbsolutePath().endsWith(".xml") && out.getAbsolutePath().endsWith(".json")) {
-            //from xml
-            try (BufferedReader reader = new BufferedReader(new FileReader(in));
-                 BufferedWriter writer = new BufferedWriter(new FileWriter(out));
-                 JsonGenerator jsonGenerator = jsonFactory.createGenerator(writer)) {
-                //from xml
-                JAXBContext jaxbContext = JAXBContext.newInstance(FineList.class);
-                Unmarshaller unmarshaller = jaxbContext.createUnmarshaller();
-                FineList list = (FineList) unmarshaller.unmarshal(reader);
-
-                //to json
-                Map<String, BigDecimal> map = new HashMap<>();
-                list.getList()
-                        .forEach(x -> map.put(x.getType(), map.getOrDefault(x.getType(), BigDecimal.ZERO).add(x.getAmount())));
-                ObjectMapper mapper = new ObjectMapper();
-                ArrayNode arrayNode = new ArrayNode(JsonNodeFactory.instance);
-                for (String string : map.keySet()) {
-                    ObjectNode oNode = mapper.createObjectNode();
-                    oNode.put(string.toLowerCase(Locale.ROOT), map.get(string).doubleValue());
-                    arrayNode.add(oNode);
-                }
-                writer.write(arrayNode.toString());
-            } catch (JAXBException e) {
-                e.printStackTrace();
-            }
-        } else {
-            System.out.println("file type is not correct");
+            marshalling(container, fList, out);
         }
-
+        //from xml to json
+        else if (out.getAbsolutePath().endsWith(".json")) {
+            for (File file : Objects.requireNonNull(in.listFiles())) {
+                try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+                    JAXBContext jaxbContext = JAXBContext.newInstance(FineList.class);
+                    Unmarshaller unmarshaller = jaxbContext.createUnmarshaller();
+                    FineList list = (FineList) unmarshaller.unmarshal(reader);
+                    list.getList()
+                            .forEach(x -> container.put(x.getType(), container.getOrDefault(x.getType(), BigDecimal.ZERO).add(x.getAmount())));
+                }
+            }
+            BufferedWriter writer = new BufferedWriter(new FileWriter(out));
+            writer.write(mapping(container).toString());
+            writer.flush();
+            writer.close();
+        }
     }
+
+    private static ArrayNode mapping(Map<String, BigDecimal> container) {
+        ObjectMapper oMapper = new ObjectMapper();
+        ArrayNode arrayNode = new ArrayNode(JsonNodeFactory.instance);
+        for (String str : container.keySet()) {
+            ObjectNode oNode = oMapper.createObjectNode();
+            oNode.put(str.toLowerCase(Locale.ROOT), container.get(str).doubleValue());
+            arrayNode.add(oNode);
+        }
+        return arrayNode;
+    }
+
+    private static void marshalling(Map<String, BigDecimal> finesMap, FineList finesList, File out) throws JAXBException {
+        List<Fine> list = new ArrayList<>();
+        finesMap.entrySet().stream()
+                .sorted(Map.Entry.<String, BigDecimal>comparingByValue().reversed())
+                .forEach(x -> list.add(new Fine(x.getKey(), x.getValue())));
+        finesList.getList().addAll(list);
+        JAXBContext jaxbContext = JAXBContext.newInstance(FineList.class);
+        Marshaller marshaller = jaxbContext.createMarshaller();
+        marshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, Boolean.TRUE);
+        marshaller.marshal(finesList, out);
+    }
+
 }

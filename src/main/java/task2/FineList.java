@@ -4,12 +4,15 @@ import task2.Fine;
 
 import javax.xml.bind.annotation.XmlElement;
 import javax.xml.bind.annotation.XmlRootElement;
+import java.util.ArrayList;
 import java.util.List;
 @XmlRootElement(name = "fines")
 public class FineList {
 
     private List<Fine> list;
-    public FineList(){}
+    public FineList(){
+        list = new ArrayList<>();
+    }
     @XmlElement(name = "fine")
     public List<Fine> getList() {
         return list;
